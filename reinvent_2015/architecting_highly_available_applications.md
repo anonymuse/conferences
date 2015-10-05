@@ -115,11 +115,13 @@ Architect and optimize your applications for AWS
 Automate and test your HA implementation
 
 **Optimizing Edge Services**
+
 Think about using S3 for websites, which can host the downloads of digital
 assets. Use S3 for static sites, which can be used for basic websites as
 disaster recovery options.
 
 **Highly Availability DNS**
+
 DNS is a tier-0 service, where availability is number 1.
 Design principles:
   - reliable
@@ -130,6 +132,7 @@ Design principles:
   - flexible
 
 **Cloudfront**
+
 Use CDNs for content distribution, which allows you to distribute content to end users with low-latency and high data transfer speeds.
   - Push requests to CDN, not your servers.
 
@@ -144,3 +147,45 @@ Optimizations made for Cloudfront:
 
 Error codes
 Can create custom error codes
+
+
+**Core Web Application Services**
+Elimiinate SPOF
+Enable elasticity
+Handle traffic spikes
+Add resiliency
+
+**Types of elasticity**
+On / off
+fast growth
+variable peaks
+predictable peaks
+
+**Modern 3 Tier Web Application**
+Web, application, and database servers.
+
+Web tier foundation components:
+Elastic load balancing
+Cloudwatch
+Auto-scaling
+
+ELB:
+  - scales smoothyl based on traffic
+  - scaling takes from 1-7 minutes
+  - for spiky traffic, pre-warm the ELB
+  - submit a request to AWS, or incease traffic no more than 50% over 5 minute interval.
+Use external and internal ELBs
+External: web tier use only private IP addresses
+Internal: loadbalance between multiple internal tiers. Must have subnet
+availablity to acoommodate ELB scaling (/27 or greater with at least 8 free IP
+addresses.)
+
+Elasticity via Auto Scaling
+scale in and out, rebalance across AZs, add remote from ELB is applicable.
+
+**Auto Scaling**
+Types of scaling:
+  - manual
+  - by schedule
+  - by policy
+  - auto-rebalance
