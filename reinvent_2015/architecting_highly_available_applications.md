@@ -210,3 +210,100 @@ Terminating state
  - capture a final snapshot of any work in progress,
  - move log files to long-term storage
  - hold malfunctioning instances off to the side for debugging
+
+
+**AWS Storage Options**
+- Pick the right storage for the workload  Amazon EC2
+ - Amazon EC2 Local Instance Store (Ephemeral volumes)
+  - Magnetic and SSD
+  - Amazon EBS (Elastic Block Storage)
+  - Magnetic, General Purpose (SSD) or PIOPS (SSD)
+ - Amazon EFS: NAS  Object Storage
+ - Amazon S3 (Simple Storage Service)
+ - Amazon Glacier (Archival/Cold Storage)
+
+Each has a unique combination of performance, durability, cost and interface
+
+**EBS Snapshots**
+EBS is designed for 99.999 availablility, but is only designed for a single AZ.
+Increase availability by snapshotting and replcation. Take snapshots regularly.
+Snapshots are stored durably in S3, which allows you to generate new volumes to
+any AZ in a region.
+
+To obtain consistent snapshots:
+- Quiese file systems OR unmount filesystem.
+- Use OS specific tools.
+- Reduce snapshot overheard through using a replica, or during off-hours. Recent improvements to the EBS subsystem have decreased the amount of overhead of snapshots on IO performance.
+
+**Replication**
+
+Increase your availability by replicating your volumes to another AZ.
+
+#### EBS Performance
+
+**GP2 Volumes**
+
+SSD-backed, single digit millisecond latencies. General workload capabilities with no EBS I/O charges. Your default.
+- Each volume up to 1TB gets an IO credit of 5.4 million IOPS
+ - 30mins x 60sec/min x 3000iops= 5,400,000 IOPS
+- Burstable up to 3000 IOPS for 30 minutes
+ - Once IOPS are depleted, it’s replenished at the baseline rate
+- Sustained performance until IOPS are depleted
+- Volumes greater than 1TB will always have a minimum of 3000 IOPS
+
+**PIOPS Volumes**
+- Use PIOPS for consistent IO performance  Up to 20,000 16KB IOPS/volume
+ - Stripe multiple volumes for >20000 IOPS
+ - Recommended for high performance workloads
+- Use with EBS Optimized instance types
+ - http://amzn.to/1LP2wSL
+- Dive Deep
+ -  Maximizing EC2 and Elastic Block Store Disk Performance  http://bit.ly/1J8yiKj
+
+
+#### Instance Storage
+
+- Storage local to Amazon EC2 instance
+- Temporary, volatile block storage
+- Not all instances have instance storage: e.g. T2, M4, C4  Must be configured
+	at launch of instance
+- Suitable for sequential I/O
+- Reduces network & EBS contention
+- Instance Store backed AMIs
+- Root/boot volume is on instance store  Ideal for stateless servers
+- Good for establishing the provenance of data security? The data doesn't leave
+	machine and traverse the network.
+
+Ranges from 0 GB to 48 TB of storage. Can be used for transient or replicated
+data. Swap, caches, temp tables, intermediate data, non-persistent data SSD
+Instance storage ideal for high performance workloads. Up to 365,000 4 KB
+random read IOPS and up to 315,000 4 KB random first write IOPS
+
+Instance storage is neither Highly Available nor Fault Tolerant. Data is lost
+if instance is stopped or terminated. Back up and/or replicate important data.
+Enable EC2 Termination Protection. Use with data that doesn’t need to be
+retained across instance stop/start
+
+**Pre-warming**
+For new volumes, EBS wipes blocks clean. For restored volumes, EBS instantiates
+blocks from its snapshot. To obtain best performance, pre-warm the volume •
+http://amzn.to/1evnVDn. Recommended for high performance workloads Pre-warming
+applies to EBS or Instance volumes For new volumes or restores from snapshots
+￼￼￼￼￼￼￼
+Pre-warm new Volumes: Write to all the blocks before first use. Large volumes
+can take hours to write. Restored Volumes: Read all blocks
+```
+Linux: dd if=/dev/md0 of=/dev/null
+Windows: NTFS full format
+```
+
+#### Amazon Elastic File System (EFS)
+Fully managed file system for EC2 instances. Provides standard file system
+semantics. Works with standard operating system APIs Sharable across thousands
+of instances. Elastically grows to petabyte scale. Delivers performance for a
+wide variety of workloads. Highly available and durable. NFS v4–based
+- File system grows/shrinks automatically.
+- No need for storage provisioning.
+- Pay for the storage that you use.
+
+#### Amazon S3
