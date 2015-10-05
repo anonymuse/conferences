@@ -89,7 +89,8 @@ AWS is a virtuall programmable data center, a key differentiator. Treat infrastr
 timeline, not chance's timeline.  See Netflix's 'Principles of Chaos':
 http://www.principlesofchaos.org/
 
-``` Advances in large-scale, distributed
+```
+Advances in large-scale, distributed
 software systems are changing the game for software engineering.  As an
 industry, we are quick to adopt practices that increase flexibility of
 development and velocity of deployment.  An urgent question follows on the
