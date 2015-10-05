@@ -28,7 +28,7 @@ Scalability
 accommodate growth without changing design
 scalability doesn’t guarantee availability
 
-Disaster recovery
+**Disaster recovery**
 
 HA & DR
 HA is the other end of the DR continuum
@@ -55,3 +55,25 @@ Examples:
   - SES outobound email
   - SQS: queues
   -DynamoDB: NoSQL
+
+Some services must be designed for availailability.
+Fundamental AWS services has flexible deployment options, which means that you can deply them in non-fault tolerant modes.
+  - fault tolerance is desireable for production environments
+  - not suitable for development environments
+Connectivity for the VPC must also be designed for availability.
+
+Traditional architecture relies on duplicates to achieve scale, as opposed to the inherent strengths of AWS.
+
+Single region, multi-AZ
+  - on prem, many customers limited to a single DC
+  - Production apps should use multiple AZs. They have network diversity, geo-dispersion and incorporate built-in redundancy.
+
+Multi-region is for:
+  - geographic expansion
+  - DR
+  - good for independent stacks that have no dependency on other regions
+
+Multi-region for a single app can be very complex
+  - consider latency
+  - database sync
+  - 
