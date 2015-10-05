@@ -40,3 +40,18 @@ Goal: application never goes down
 Traditional IT says that HA is very expensive and is only suitable for mission critical applications
 
 AWS offers multiple services, isolated and redundant datacenter.t psetd s
+
+Inherently fault tolerant:
+PaaS
+
+Fault tolerant if done correctly:
+Iaas
+
+Always do fault tolerance services
+Where possible, use platform services instead of rolling your own
+Service availability is built in.
+
+Examples:
+  - SES outobound email
+  - SQS: queues
+  -DynamoDB: NoSQL
