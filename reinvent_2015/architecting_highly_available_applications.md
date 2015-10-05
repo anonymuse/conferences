@@ -184,8 +184,29 @@ Elasticity via Auto Scaling
 scale in and out, rebalance across AZs, add remote from ELB is applicable.
 
 **Auto Scaling**
+
 Types of scaling:
   - manual
   - by schedule
   - by policy
   - auto-rebalance
+
+Auto scaling strategies must include proper bootstrapping of provisioned EC2 instances
+AMI management
+Software to install or configure (including rebooting)  Discovery or registration of new instances
+A low-touch, highly dynamic approach is necessary to meet high availability SLAs
+
+Lifecycle Management
+
+Initialize and decommission your instances cleanly
+
+Pending state
+- After launch but before it is attached to the ASG
+- Configure software, create, format, and attach EBS volumes, connect the instance to message queues
+
+Terminating state
+- Detached from the ASG but before it has been terminated
+- Do any additional work to fully decommission the instance
+ - capture a final snapshot of any work in progress,
+ - move log files to long-term storage
+ - hold malfunctioning instances off to the side for debugging
