@@ -78,28 +78,32 @@ Multi-region for a single app can be very complex
   - database sync
 
 **Reserving Capacity**
+
 AWS does not offer unlimited capacity. Reserved instancess can ensure capacity and are usefule is capacity is constrained.
 Always pay attention to you service limites. Anticipate and adjust AWS resource limits ahead of time.
 
 **Automation**
+
 AWS is a virtuall programmable data center, a key differentiator. Treat infrastructure as code. HA cannot exist without automation. Manually intervened services is not HA.
 
 
-**Chaos Monkey** Failures happen when you don't expect it Test on your
+**Chaos Monkey**
+
+Failures happen when you don't expect it Test on your
 timeline, not chance's timeline.  See Netflix's 'Principles of Chaos':
 http://www.principlesofchaos.org/
 
 ```
-Advances in large-scale, distributed
-software systems are changing the game for software engineering.  As an
-industry, we are quick to adopt practices that increase flexibility of
-development and velocity of deployment.  An urgent question follows on the
-heels of these benefits: How much confidence we can have in the complex systems
-that we put into production? - See more at:
+Advances in large-scale, distributed software systems are changing the game for
+software engineering.  As an industry, we are quick to adopt practices that
+increase flexibility of development and velocity of deployment.  An urgent
+question follows on the heels of these benefits: How much confidence we can
+have in the complex systems that we put into production? - See more at:
 http://www.principlesofchaos.org/#sthash.bVQfTNVL.dpuf
 ```
 
 **Summary**
+
 Be skeptical when designing for availability
 Everything fails all the time
 Design for faiulre
@@ -110,6 +114,33 @@ Follow best practices for adding HA to other services
 Architect and optimize your applications for AWS
 Automate and test your HA implementation
 
+**Optimizing Edge Services**
+Think about using S3 for websites, which can host the downloads of digital
+assets. Use S3 for static sites, which can be used for basic websites as
+disaster recovery options.
 
+**Highly Availability DNS**
+DNS is a tier-0 service, where availability is number 1.
+Design principles:
+  - reliable
+  - fast
+  - integrated with AWS
+  - easy to use
+  - cost effective
+  - flexible
 
+**Cloudfront**
+Use CDNs for content distribution, which allows you to distribute content to end users with low-latency and high data transfer speeds.
+  - Push requests to CDN, not your servers.
 
+Optimizations made for Cloudfront:
+  - TCP/IP optimizatinos
+  - Keep-alive connections to reduce RTT
+  - collapsed forwarding
+  - device detecion
+  - SSL termination at the edge
+  - POST/PUT upload optimizations
+  - latency based routing
+
+Error codes
+Can create custom error codes
