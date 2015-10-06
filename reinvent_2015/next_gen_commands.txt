@@ -1,0 +1,119 @@
+# Text Commands for use with the Labs
+Copy and paste commands from here, rather than the Qwiklabs PDF
+
+## LAB 1:
+
+
+# Set error strings
+errorInsecurePort = "Error: Insecure source port found"
+
+# List of ports to block
+insecurePorts = [20,23,25,80,110,111,119,143,161,194,389]
+
+f = File.read("template.json")
+data_hash = JSON.parse(f)
+data_hash['Resources'].each {|res|
+  if ( res[1]['Type'].downcase.include? 'aws::ec2::securitygroupingress' )
+    insecurePorts.each {|port|
+      if (port > res[1]['Properties']['FromPort'] && port < res[1]['Properties']['ToPort'])
+        p errorInsecurePort + " (#{port})"
+        fail = true
+      end
+    }
+  end
+}
+
+
+## End LAB 1
+
+
+----------------------------
+
+
+## LAB 2:
+
+
+rm -f appspec.yml
+export S3BUCKET=`echo $JAVA_OPTS | sed 's/.*JenkinsJobBucket="//' | sed 's/".*//'`
+cat application/appspec.yml >> appspec.yml
+cat validation/security-validation.yml >> appspec.yml
+zip -r package.zip *
+aws s3 cp package.zip s3://$S3BUCKET/codedeploy/build-$BUILD_NUMBER/package.zip
+
+
+## End LAB 2
+
+
+----------------------------
+
+
+## LAB 3:
+
+
+####Script to retrieve DDB content
+
+require 'aws-sdk-v1'
+ec2 = AWS::EC2.new
+
+dynamo_db = AWS::DynamoDB.new
+ddb_client = AWS::DynamoDB::Client.new(:api_version => '2012-08-10')
+
+# Create table
+ddb_table = "SecLabInventory"
+ddb = dynamo_db.tables["#{ddb_table}"]
+ddb.hash_key = [:instance_id, :string]
+
+# Retrieve Items
+ddb.items.each { |item| puts item.attributes.to_h }
+
+###End script
+
+
+
+####Ruby script to trigger flow
+
+Adde the following to a file called starter.rb:
+#starter.rb
+require 'aws/decider'
+require 'aws-sdk-v1'
+require 'rubygems'
+require 'openssl'
+require 'net/http'
+
+my_region = Net::HTTP.get_response("169.254.169.254","/latest/meta-data/placement/availability-zone/").body.chop!
+AWS.config(region: my_region)
+
+input = {
+  #instance_id: "123456789012"
+  instance_id: "#{ARGV[0]}"
+}
+
+opts = {
+  domain: "SecDemo",
+  version: "1.0"
+}
+
+AWS::Flow::start_workflow("SecLabWorkflow.secure_client", input, opts)
+#End file
+
+
+To trigger the workflow you run:
+  ruby starter.rb i-2134d281 && tail -f /var/log/aws-flow-ruby.log
+Make sure to replace the instance ID with the real ID. This will be added automatically when triggering the flow from Elastic Beanstalk app.
+
+
+Bonus task to check log on SWF instance:
+ruby /var/app/current/starter.rb i-5dbbd8fd & tail â€“f /var/log/aws-flow-ruby.log
+
+###End flow command
+
+
+
+####Temporary rsa key needed on managed instances
+
+- ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCS1pul+aFfuv0IAtLp0/bSMYByEkd6jzMektaB7x4b/PqUshXgQHtsbg1rQU6K0Zvtj7VK9EZ/7KWb0YYE+jVQfAK7dCyUArV9MN9I/4KLSMWmeJ5qjmkwRy1a2Qs8jd9VCU9DyCBCJvaYpkzMt+aUebUWpphGMyhd/XTyQUmRK5PiWHk0tz4VnoicTGat+V70KsGm82vJ7P1/hcJAmqyCSB6U+Ea0fIxQ1NtSLv7ClPrwy1SPeaL83LUersOPf6PZGLpbHY+yMMFgGmYR8IPiD8+8m8ImVrFKr84TN0SsYWXy3QFPDfaEl/4OHSI3OZmMBYydWD71tlshDjzewZm9
+
+###End key
+
+
+## End LAB 3k:
