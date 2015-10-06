@@ -1,0 +1,124 @@
+{
+  "Parameters": {
+    "EnvironmentVariables": {
+      "NoEcho": "true",
+      "Type": "CommaDelimitedList",
+      "Description": "Program environment variables.",
+      "Default": "JDBC_CONNECTION_STRING="
+    },
+    "LogPublicationControl": {
+      "NoEcho": "true",
+      "Type": "String",
+      "Description": "If true customer service logs will be published to S3.",
+      "AllowedValues": [
+        "true",
+        "false"
+      ],
+      "ConstraintDescription": "must be Boolean.",
+      "Default": "false"
+    },
+    "InstancePort": {
+      "NoEcho": "true",
+      "Type": "String",
+      "Description": "Listen Port",
+      "Default": "80"
+    },
+    "AWSEBAgentId": {
+      "NoEcho": "true",
+      "Type": "String",
+      "Default": ""
+    },
+    "AWSEBEnvironmentId": {
+      "NoEcho": "true",
+      "Type": "String"
+    },
+    "HooksPkgUrl": {
+      "NoEcho": "true",
+      "Type": "String",
+      "Description": "URL to hooks package",
+      "Default": "https://s3-us-west-2.amazonaws.com/elasticbeanstalk-env-resources-preprod-us-west-2/stalks/eb_tomcat_4.0.1.31.2/lib/hooks.tar.gz"
+    },
+    "JVMOptions": {
+      "NoEcho": "true",
+      "Type": "CommaDelimitedList",
+      "Description": "Jvm Options.",
+      "Default": "Xms=256m,Xmx=256m,XX:MaxPermSize=64m,JVM Options="
+    },
+    "InstanceType": {
+      "NoEcho": "true",
+      "Type": "String",
+      "Description": "WebServer EC2 instance type",
+      "AllowedValues": [
+        "t2.micro",
+        "t2.small",
+        "t2.medium",
+        "t2.large",
+        "m3.medium",
+        "m3.large",
+        "m3.xlarge",
+        "m3.2xlarge",
+        "c3.large",
+        "c3.xlarge",
+        "c3.2xlarge",
+        "c3.4xlarge",
+        "c3.8xlarge",
+        "t1.micro",
+        "m1.small",
+        "m1.medium",
+        "m1.large",
+        "m1.xlarge",
+        "c1.medium",
+        "c1.xlarge",
+        "c4.large",
+        "c4.xlarge",
+        "c4.2xlarge",
+        "c4.4xlarge",
+        "c4.8xlarge",
+        "m2.xlarge",
+        "m2.2xlarge",
+        "m2.4xlarge",
+        "m4.large",
+        "m4.xlarge",
+        "m4.2xlarge",
+        "m4.4xlarge",
+        "m4.10xlarge",
+        "cc2.8xlarge",
+        "hi1.4xlarge",
+        "hs1.8xlarge",
+        "cr1.8xlarge",
+        "g2.2xlarge",
+        "g2.8xlarge",
+        "i2.xlarge",
+        "i2.2xlarge",
+        "i2.4xlarge",
+        "i2.8xlarge",
+        "r3.large",
+        "r3.xlarge",
+        "r3.2xlarge",
+        "r3.4xlarge",
+        "r3.8xlarge"
+      ],
+      "ConstraintDescription": "must be a valid EC2 instance type.",
+      "Default": "t1.micro"
+    },
+    "AWSEBEnvironmentBucket": {
+      "NoEcho": "true",
+      "Type": "String"
+    },
+    "AWSEBReferrerId": {
+      "NoEcho": "true",
+      "Type": "String",
+      "Default": ""
+    },
+    "AWSEBEnvironmentName": {
+      "NoEcho": "true",
+      "Type": "String"
+    },
+    "AppSource": {
+      "NoEcho": "true",
+      "Type": "String",
+      "Description": "Application Source",
+      "Default": "https://elasticbeanstalk-samples-us-west-2.s3-us-west-2.amazonaws.com/elasticbeanstalk-sampleapp.war"
+    }
+  }
+}

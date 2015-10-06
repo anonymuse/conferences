@@ -1,0 +1,40 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "Service Catalog dependencies.",
+    "Mappings": {},
+    "Outputs": {},
+    "Parameters": {},
+    "Resources": {
+        "ManagementGroupIngressRuleA": {
+            "Properties": {
+                "CidrIp": "10.10.10.0/24",
+                "FromPort": 22,
+                "GroupId": {
+                    "Ref": "ManagementSecurityGroup"
+                },
+                "IpProtocol": "tcp",
+                "ToPort": 22
+            },
+            "Type": "AWS::EC2::SecurityGroupIngress"
+        },
+        "ManagementGroupIngressRuleB": {
+            "Properties": {
+                "CidrIp": "10.10.20.0/24",
+                "FromPort": 22,
+                "GroupId": {
+                    "Ref": "ManagementSecurityGroup"
+                },
+                "IpProtocol": "tcp",
+                "ToPort": 22
+            },
+            "Type": "AWS::EC2::SecurityGroupIngress"
+        },
+        "ManagementSecurityGroup": {
+            "Properties": {
+                "GroupDescription": "Security group for management traffic",
+                "VpcId": "vpc-3e97de5b"
+            },
+            "Type": "AWS::EC2::SecurityGroup"
+        }
+    }
+}

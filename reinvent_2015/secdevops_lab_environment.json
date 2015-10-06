@@ -1,0 +1,1517 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "SecDevOps Labs Environment.",
+  "Parameters": {
+    "SourcesBucket": {
+      "Description": "The S3 bucket under which the application deployment files are located. MUST BE IN THE SAME REGION AS THE DEPLOYED STACK.",
+      "Type": "String",
+      "Default": "us-west-2-aws-training"
+    },
+    "SourcesKeyPrefix": {
+      "Description": "The S3 object prefix which the application deployment files are located. MUST BE IN THE SAME REGION AS THE DEPLOYED STACK.",
+      "Type": "String",
+      "Default": "bootcamp/secure-ng-cloud/labs/nov"
+    },
+    "KeyName": {
+      "Description": "An existing Amazon EC2 key pair for SSH access",
+      "Type": "String",
+      "Default": ""
+    }
+  },
+  "Mappings": {
+    "RegionMap": {
+      "us-east-1": {
+        "64": "ami-1ecae776"
+      },
+      "us-west-2": {
+        "64": "ami-e7527ed7"
+      }
+    }
+  },
+  "Resources": {
+    "VPC": {
+      "Type": "AWS::EC2::VPC",
+      "Properties": {
+        "CidrBlock": "10.10.0.0/16",
+        "EnableDnsHostnames": true,
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "SecDevOps Labs"
+          }
+        ]
+      }
+    },
+    "PublicSubnetA": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "MapPublicIpOnLaunch": true,
+        "CidrBlock": "10.10.1.0/24",
+        "AvailabilityZone": {
+          "Fn::Select": [ "0", { "Fn::GetAZs": { "Ref": "AWS::Region" }}]
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "SecDevOps-Public-A"
+          }
+        ]
+      }
+    },
+    "PublicSubnetB": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "MapPublicIpOnLaunch": true,
+        "CidrBlock": "10.10.2.0/24",
+        "AvailabilityZone": {
+          "Fn::Select": [ "1", { "Fn::GetAZs": { "Ref": "AWS::Region" }}]
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "SecDevOps-Public-B"
+          }
+        ]
+      }
+    },
+    "RTBAssocA": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": { "Ref": "PublicSubnetA" },
+        "RouteTableId": { "Ref": "PublicRouteTable" }
+      }
+    },
+    "RTBAssocB": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": { "Ref": "PublicSubnetB" },
+        "RouteTableId": { "Ref": "PublicRouteTable" }
+      }
+    },
+    "InternetGateway": {
+      "Type": "AWS::EC2::InternetGateway"
+    },
+    "AttachGateway": {
+      "Type": "AWS::EC2::VPCGatewayAttachment",
+      "Properties": {
+        "VpcId": { "Ref": "VPC" },
+        "InternetGatewayId": { "Ref": "InternetGateway" }
+      }
+    },
+    "PublicRouteTable": {
+      "Type": "AWS::EC2::RouteTable",
+      "Properties": {
+        "VpcId": { "Ref": "VPC" }
+      }
+    },
+    "Route": {
+      "Type": "AWS::EC2::Route",
+      "DependsOn": "AttachGateway",
+      "Properties": {
+        "RouteTableId": { "Ref": "PublicRouteTable" },
+        "DestinationCidrBlock": "0.0.0.0/0",
+        "GatewayId": { "Ref": "InternetGateway" }
+      }
+    },
+    "IAMCli": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "ImageId": {
+          "Fn::FindInMap": [
+            "RegionMap", { "Ref": "AWS::Region" }, "64"
+          ]
+        },
+        "InstanceType": "t2.micro",
+        "KeyName": { "Ref": "KeyName" },
+        "SecurityGroupIds": [
+          { "Ref": "IAMCliSecurityGroup" }
+        ],
+        "SubnetId": { "Ref": "PublicSubnetA" },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "IamCli"
+          },
+          {
+            "Key": "Lab",
+            "Value": "IAM"
+          }
+        ],
+        "UserData": {
+          "Fn::Base64": {
+            "Fn::Join": [
+              "",
+              [
+                "#!/bin/bash -ex\n",
+                "yum install -y aws-cli\n",
+                "cd /home/ec2-user\n",
+                "cat <<EOF >> set_creds.py\n",
+                "#!/usr/bin/python\n",
+                "\n",
+                "# set_creds.py\n",
+                "\n",
+                "# This simple program retrieves a JSON file containing short lived credentials\n",
+                "# from our simulated access control server.\n",
+                "import requests\n",
+                "import ConfigParser\n",
+                "import getpass\n",
+                "import os\n",
+                "\n",
+                "# The file where this script will store the temp\n",
+                "# credentials under the iamlab profile\n",
+                "awsconfigfile = 'credentials'\n",
+                "awsconfigpath = '/.aws/'\n",
+                "\n",
+                "# Get the basic credentials from the user. A production version would\n",
+                "# leverage a more complex authentication mechanism\n",
+                "print \"Username:\",\n",
+                "username = raw_input()\n",
+                "password = getpass.getpass()\n",
+                "print \"Access Control Server:\",\n",
+                "server = raw_input()\n",
+                "print \"Account Number:\",\n",
+                "account = raw_input()\n",
+                "print ''\n",
+                "\n",
+                "# Retrieve AWS credentials from access server\n",
+                "url = server + '/role-token/' + account + '/' + username\n",
+                "print 'Retrieving credentials from ' + url + '...'\n",
+                "response = requests.get(url, auth=(username, password))\n",
+                "\n",
+                "# Raise exception if status code is not 200\n",
+                "response.raise_for_status()\n",
+                "\n",
+                "print '\\nResults:'\n",
+                "print response.json()\n",
+                "\n",
+                "home = os.path.expanduser(\"~\")\n",
+                "filename = home + awsconfigpath + awsconfigfile\n",
+                "print '\\nWriting credentials to ' + filename\n",
+                "\n",
+                "# Read in the existing config file\n",
+                "config = ConfigParser.RawConfigParser()\n",
+                "config.read(filename)\n",
+                "\n",
+                "# Put the credentials into a specific profile instead of clobbering\n",
+                "# the default credentials\n",
+                "if not config.has_section('iamlab'):\n",
+                "    config.add_section('iamlab')\n",
+                "\n",
+                "config.set('iamlab', 'aws_access_key_id', response.json()['AccessKeyId'])\n",
+                "config.set('iamlab', 'aws_secret_access_key', response.json()['SecretAccessKey'])\n",
+                "config.set('iamlab', 'aws_session_token', response.json()['SessionToken'])\n",
+                "\n",
+                "# Write the updated config file\n",
+                "if not os.path.isdir(home + awsconfigpath):\n",
+                "    os.mkdir(home + awsconfigpath)\n",
+                "\n",
+                "with open(filename, 'w') as configfile:\n",
+                "    config.write(configfile)\n",
+                "\n",
+                "# Give the user some basic info as to what has just happened\n",
+                "print '\\n----------------------------------------------------------------'\n",
+                "print 'Your new access key pair has been stored in the AWS configuration file'\n",
+                "print '{0} under the iamlab profile.'.format(filename)\n",
+                "print 'Note that it will expire at {0}.'.format(response.json()['Expiration'])\n",
+                "print 'To use this credential call the AWS CLI with the --profile option'\n",
+                "print '(e.g. aws --profile iamlab ec2 describe-instances).'\n",
+                "print '----------------------------------------------------------------\\n'\n",
+                "EOF"
+              ]
+            ]
+          }
+        }
+      }
+    },
+    "IAMCliSecurityGroup" : {
+      "Type" : "AWS::EC2::SecurityGroup",
+      "Properties" : {
+        "GroupDescription" : "SecDevOps demo toolbox authorized source access IPs",
+        "SecurityGroupIngress" : [
+          {"CidrIp" : "0.0.0.0/0", "IpProtocol" : "tcp", "FromPort" : "22", "ToPort" : "22"}
+        ],
+        "VpcId" : {"Ref" : "VPC" }
+      }
+    },
+    "IAMProfile": {
+      "Type": "AWS::IAM::InstanceProfile",
+      "Properties": {
+        "Path": "/",
+        "Roles": [
+          { "Ref": "IAMRole" }
+        ]
+      }
+    },
+    "IAMRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": [
+                  "ec2.amazonaws.com"
+                ]
+              },
+              "Action": [
+                "sts:AssumeRole"
+              ]
+            }
+          ]
+        },
+        "Path": "/",
+        "Policies": [
+          {
+            "PolicyName": "CreatedViaCloudFormation",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "Stmt1437356961000",
+                  "Effect": "Allow",
+                  "Action": [
+                    "*"
+                  ],
+                  "Resource": [
+                    "*"
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "IAMApp": {
+      "Type": "AWS::ElasticBeanstalk::Application",
+      "Properties": {
+        "Description": "IAM Demo App created by a CloudFormation template."
+      }
+    },
+    "IAMVersion": {
+      "Type": "AWS::ElasticBeanstalk::ApplicationVersion",
+      "Properties": {
+        "ApplicationName": { "Ref": "IAMApp" },
+        "Description": "IAM Demo",
+        "SourceBundle": {
+          "S3Bucket": { "Ref": "SourcesBucket" },
+          "S3Key": { "Fn::Join": [ "/", [ { "Ref": "SourcesKeyPrefix" }, "iam-lab.zip" ]]}
+        }
+      }
+    },
+    "FunctionGreen": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Code": {
+          "S3Bucket": { "Ref": "SourcesBucket" },
+          "S3Key": { "Fn::Join": [ "/", [ { "Ref": "SourcesKeyPrefix" }, "green.zip" ]]}
+        },
+        "Handler": "green.handler",
+        "Runtime": "nodejs",
+        "Role": { "Fn::GetAtt": [ "LambdaExecutionRole", "Arn" ] }
+      }
+    },
+    "FunctionBlue": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Code": {
+          "S3Bucket": { "Ref": "SourcesBucket" },
+          "S3Key": { "Fn::Join": [ "/", [ { "Ref": "SourcesKeyPrefix" }, "blue.zip" ]]}
+        },
+        "Handler": "blue.handler",
+        "Runtime": "nodejs",
+        "Role": { "Fn::GetAtt": [ "LambdaExecutionRole", "Arn" ]}
+      }
+    },
+    "FunctionRed": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Code": {
+          "S3Bucket": { "Ref": "SourcesBucket" },
+          "S3Key": { "Fn::Join": [ "/", [ { "Ref": "SourcesKeyPrefix" }, "red.zip" ]]}
+        },
+        "Handler": "red.handler",
+        "Runtime": "nodejs",
+        "Role": { "Fn::GetAtt": [ "LambdaExecutionRole", "Arn" ]}
+      }
+    },
+    "LambdaExecutionRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": [
+                  "lambda.amazonaws.com"
+                ]
+              },
+              "Action": [
+                "sts:AssumeRole"
+              ]
+            }
+          ]
+        },
+        "Path": "/",
+        "ManagedPolicyArns": [
+          "arn:aws:iam::aws:policy/AWSLambdaExecute"
+        ]
+      }
+    },
+    "IAMEnv": {
+      "Type": "AWS::ElasticBeanstalk::Environment",
+      "Properties": {
+        "ApplicationName": { "Ref": "IAMApp" },
+        "OptionSettings": [
+          {
+            "Namespace": "aws:elasticbeanstalk:environment",
+            "OptionName": "EnvironmentType",
+            "Value": "SingleInstance"
+          },
+          {
+            "Namespace": "aws:elasticbeanstalk:container:nodejs",
+            "OptionName": "NodeCommand",
+            "Value": "npm start"
+          },
+          {
+            "Namespace": "aws:ec2:vpc",
+            "OptionName": "VpcId",
+            "Value": { "Ref": "VPC" }
+          },
+          {
+            "Namespace": "aws:ec2:vpc",
+            "OptionName": "Subnets",
+            "Value": { "Ref": "PublicSubnetA" }
+          },
+          {
+            "Namespace": "aws:ec2:vpc",
+            "OptionName": "AssociatePublicIpAddress",
+            "Value": "true"
+          },
+          {
+            "Namespace": "aws:autoscaling:launchconfiguration",
+            "OptionName": "InstanceType",
+            "Value": "t2.micro"
+          },
+          {
+            "Namespace": "aws:autoscaling:launchconfiguration",
+            "OptionName": "EC2KeyName",
+            "Value": { "Ref": "KeyName" }
+          },
+          {
+            "Namespace": "aws:autoscaling:launchconfiguration",
+            "OptionName": "IamInstanceProfile",
+            "Value": { "Ref": "IAMProfile" }
+          },
+          {
+            "Namespace": "aws:elasticbeanstalk:application:environment",
+            "OptionName": "AWS_REGION",
+            "Value": { "Ref": "AWS::Region" }
+          },
+          {
+            "Namespace": "aws:elasticbeanstalk:application:environment",
+            "OptionName": "BLUE_ARN",
+            "Value": { "Fn::GetAtt": [ "FunctionBlue", "Arn" ]}
+          },
+          {
+            "Namespace": "aws:elasticbeanstalk:application:environment",
+            "OptionName": "GREEN_ARN",
+            "Value": { "Fn::GetAtt": [ "FunctionGreen", "Arn" ]}
+          },
+          {
+            "Namespace": "aws:elasticbeanstalk:application:environment",
+            "OptionName": "RED_ARN",
+            "Value": { "Fn::GetAtt": [ "FunctionRed", "Arn" ]}
+          },
+          {
+            "Namespace": "aws:elasticbeanstalk:application:environment",
+            "OptionName": "BASE_ROLE",
+            "Value": { "Fn::GetAtt": [ "IAMRole", "Arn" ]}
+          }
+        ],
+        "SolutionStackName": "64bit Amazon Linux 2015.03 v1.4.6 running Node.js",
+        "VersionLabel": { "Ref": "IAMVersion" }
+      }
+    },
+    "CodeDeploySvcRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": [
+                  "codedeploy.amazonaws.com"
+                ]
+              },
+              "Action": [
+                "sts:AssumeRole"
+              ]
+            }
+          ]
+        },
+        "Path": "/",
+        "ManagedPolicyArns": [
+          "arn:aws:iam::aws:policy/service-role/AWSCodeDeployRole"
+        ]
+      }
+    },
+    "CodeDeployAccess": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Allow SSH access",
+        "VpcId": { "Ref": "VPC" },
+        "SecurityGroupIngress": [
+          {
+            "CidrIp": "0.0.0.0/0",
+            "FromPort": 22,
+            "ToPort": 22,
+            "IpProtocol": "tcp"
+          },
+          {
+            "CidrIp": "0.0.0.0/0",
+            "FromPort": 80,
+            "ToPort": 80,
+            "IpProtocol": "tcp"
+          }
+        ]
+      }
+    },
+    "DeployTargetProfile": {
+      "Type": "AWS::IAM::InstanceProfile",
+      "Properties": {
+        "Path": "/",
+        "Roles": [ { "Ref": "IAMRole" }]
+      }
+    },
+    "DeployTargetRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": [
+                  "ec2.amazonaws.com"
+                ]
+              },
+              "Action": [
+                "sts:AssumeRole"
+              ]
+            }
+          ]
+        },
+        "Path": "/",
+        "Policies": [
+          {
+            "PolicyName": "CodeDeploySourceAccess",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetObject",
+                    "s3:PutObject",
+                    "s3:ListBucket",
+                    "s3:DeleteObject"
+                  ],
+                  "Resource": {
+                    "Fn::Join": [
+                      "",
+                      [ "arn:aws:s3:::", { "Ref": "JenkinsJobBucket" }, "/*" ]
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "DeployTargetA": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "IamInstanceProfile": { "Ref": "DeployTargetProfile" },
+        "ImageId": "ami-9ff7e8af",
+        "InstanceType": "t2.micro",
+        "KeyName": { "Ref": "KeyName" },
+        "SecurityGroupIds": [
+          { "Ref": "CodeDeployAccess" }
+        ],
+        "SubnetId": { "Ref": "PublicSubnetA" },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "DeploymentTarget-Alpha"
+          },
+          {
+            "Key": "Lab",
+            "Value": "CodeDeploy"
+          }
+        ],
+        "UserData": {
+          "Fn::Base64": {
+            "Fn::Join": [
+              "",
+              [
+                "#!/bin/bash -ex\n",
+                "yum install -y ruby\n",
+                "yum install -y aws-cli\n",
+                "cd /home/ec2-user\n",
+                { "Fn::Join": [ "", [ "aws s3 cp s3://aws-codedeploy-", { "Ref": "AWS::Region" }, "/latest/install . --region ", { "Ref": "AWS::Region" }, "\n" ]]},
+                "chmod +x ./install\n",
+                "./install auto\n"
+              ]
+            ]
+          }
+        }
+      }
+    },
+    "DeployTargetB": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "IamInstanceProfile": { "Ref": "DeployTargetProfile" },
+        "ImageId": "ami-1627ad26",
+        "InstanceType": "t2.micro",
+        "KeyName": { "Ref": "KeyName" },
+        "SecurityGroupIds": [
+          { "Ref": "CodeDeployAccess" }
+        ],
+        "SubnetId": { "Ref": "PublicSubnetA" },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "DeploymentTarget-Beta"
+          },
+          {
+            "Key": "Lab",
+            "Value": "CodeDeploy"
+          }
+        ],
+        "UserData": {
+          "Fn::Base64": {
+            "Fn::Join": [
+              "",
+              [
+                "#!/bin/bash -ex\n",
+                "yum install -y ruby\n",
+                "yum install -y aws-cli\n",
+                "cd /home/ec2-user\n",
+                { "Fn::Join": [ "", [ "aws s3 cp s3://aws-codedeploy-", { "Ref": "AWS::Region" }, "/latest/install . --region ", { "Ref": "AWS::Region" }, "\n" ]]},
+                "chmod +x ./install\n",
+                "./install auto\n"
+              ]
+            ]
+          }
+        }
+      }
+    },
+    "CDProfile": {
+      "Type": "AWS::IAM::InstanceProfile",
+      "Properties": {
+        "Path": "/",
+        "Roles": [
+          { "Ref": "CDRole" }
+        ]
+      }
+    },
+    "CDRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": [
+                  "ec2.amazonaws.com"
+                ]
+              },
+              "Action": [
+                "sts:AssumeRole"
+              ]
+            }
+          ]
+        },
+        "Path": "/",
+        "ManagedPolicyArns": [
+          "arn:aws:iam::aws:policy/PowerUserAccess"
+        ],
+        "Policies": [
+          {
+            "PolicyName": "get_account_authorization",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "iam:GetAccountAuthorizationDetails"
+                  ],
+                  "Resource": "*"
+                }
+              ]
+            }
+          },
+          {
+            "PolicyName": "Packer_chroot_permissions",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "cloudformation:DescribeStackResource",
+                    "ec2:AttachVolume",
+                    "ec2:CreateImage",
+                    "ec2:CreateTags",
+                    "ec2:CreateSnapshot",
+                    "ec2:CreateVolume",
+                    "ec2:DetachVolume",
+                    "ec2:DeleteVolume",
+                    "ec2:Describe*",
+                    "ec2:RegisterImage"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetObject",
+                    "s3:PutObject",
+                    "s3:ListBucket",
+                    "s3:DeleteObject"
+                  ],
+                  "Resource": {
+                    "Fn::Join": [
+                      "",
+                      [ "arn:aws:s3:::", { "Ref": "JenkinsJobBucket" }, "/*" ]
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "JenkinsJobBucket": {
+      "Type": "AWS::S3::Bucket",
+      "Properties": {}
+    },
+    "CDApp": {
+      "Type": "AWS::ElasticBeanstalk::Application",
+      "Properties": {
+        "Description": "SecDevOps labs CD Infrastructure."
+      }
+    },
+    "CDVersion": {
+      "Type": "AWS::ElasticBeanstalk::ApplicationVersion",
+      "Properties": {
+        "ApplicationName": { "Ref": "CDApp" },
+        "Description": "SecDevOps labs CD Infrastructure.",
+        "SourceBundle": {
+          "S3Bucket": { "Ref": "SourcesBucket" },
+          "S3Key": { "Fn::Join": [ "/", [ { "Ref": "SourcesKeyPrefix" }, "CDBundle.zip" ]]}
+        }
+      }
+    },
+    "CDEnv": {
+      "Type": "AWS::ElasticBeanstalk::Environment",
+      "Properties": {
+        "ApplicationName": { "Ref": "CDApp" },
+        "OptionSettings": [
+          {
+            "Namespace": "aws:elasticbeanstalk:environment",
+            "OptionName": "EnvironmentType",
+            "Value": "SingleInstance"
+          },
+          {
+            "Namespace": "aws:ec2:vpc",
+            "OptionName": "VpcId",
+            "Value": { "Ref": "VPC" }
+          },
+          {
+            "Namespace": "aws:ec2:vpc",
+            "OptionName": "Subnets",
+            "Value": { "Ref": "PublicSubnetA" }
+          },
+          {
+            "Namespace": "aws:ec2:vpc",
+            "OptionName": "AssociatePublicIpAddress",
+            "Value": "true"
+          },
+          {
+            "Namespace": "aws:autoscaling:launchconfiguration",
+            "OptionName": "InstanceType",
+            "Value": "t2.medium"
+          },
+          {
+            "Namespace": "aws:elasticbeanstalk:container:tomcat:jvmoptions",
+            "OptionName": "Xmx",
+            "Value": "4096m"
+          },
+          {
+            "Namespace": "aws:elasticbeanstalk:container:tomcat:jvmoptions",
+            "OptionName": "XX:MaxPermSize",
+            "Value": "1024m"
+          },
+          {
+            "Namespace": "aws:autoscaling:launchconfiguration",
+            "OptionName": "IamInstanceProfile",
+            "Value": { "Ref": "CDProfile" }
+          },
+          {
+            "Namespace": "aws:autoscaling:launchconfiguration",
+            "OptionName": "EC2KeyName",
+            "Value": { "Ref": "KeyName" }
+          },
+          {
+            "Namespace": "aws:elasticbeanstalk:application:environment",
+            "OptionName": "SourcesBucket",
+            "Value": { "Ref": "SourcesBucket" }
+          },
+          {
+            "Namespace": "aws:elasticbeanstalk:application:environment",
+            "OptionName": "SourcesKeyPrefix",
+            "Value": { "Ref": "SourcesKeyPrefix" }
+          },
+          {
+            "Namespace": "aws:elasticbeanstalk:application:environment",
+            "OptionName": "JenkinsJobBucket",
+            "Value": { "Ref": "JenkinsJobBucket" }
+          }
+        ],
+        "SolutionStackName": "64bit Amazon Linux 2015.03 v1.4.5 running Tomcat 8 Java 8",
+        "VersionLabel": { "Ref": "CDVersion" }
+      }
+    },
+    "KMSDDBTable": {
+      "Type": "AWS::DynamoDB::Table",
+      "Properties": {
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "id",
+            "AttributeType": "S"
+          }
+        ],
+        "KeySchema": [
+          {
+            "AttributeName": "id",
+            "KeyType": "HASH"
+          }
+        ],
+        "ProvisionedThroughput": {
+          "ReadCapacityUnits": "5",
+          "WriteCapacityUnits": "5"
+        }
+      }
+    },
+    "KMSProfile": {
+      "Type": "AWS::IAM::InstanceProfile",
+      "Properties": {
+        "Path": "/",
+        "Roles": [
+          { "Ref": "KMSRole" }
+        ]
+      }
+    },
+    "KMSRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": [
+                  "ec2.amazonaws.com"
+                ]
+              },
+              "Action": [
+                "sts:AssumeRole"
+              ]
+            }
+          ]
+        },
+        "Path": "/",
+        "Policies": [
+          {
+            "PolicyName": "CreatedViaCloudFormation",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "Stmt1437356934000",
+                  "Effect": "Allow",
+                  "Action": [
+                    "kms:*"
+                  ],
+                  "Resource": [
+                    "*"
+                  ]
+                },
+                {
+                  "Sid": "Stmt1437356961000",
+                  "Effect": "Allow",
+                  "Action": [
+                    "dynamodb:BatchGetItem",
+                    "dynamodb:BatchWriteItem",
+                    "dynamodb:DeleteItem",
+                    "dynamodb:DescribeTable",
+                    "dynamodb:GetItem",
+                    "dynamodb:GetRecords",
+                    "dynamodb:ListTables",
+                    "dynamodb:PutItem",
+                    "dynamodb:Query",
+                    "dynamodb:Scan",
+                    "dynamodb:UpdateItem"
+                  ],
+                  "Resource": [
+                    "*"
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "KMSApp": {
+      "Type": "AWS::ElasticBeanstalk::Application",
+      "Properties": {
+        "Description": "KMS Demo App created by a CloudFormation template."
+      }
+    },
+    "KMSVersion": {
+      "Type": "AWS::ElasticBeanstalk::ApplicationVersion",
+      "Properties": {
+        "ApplicationName": { "Ref": "KMSApp" },
+        "Description": "KMS Demo",
+        "SourceBundle": {
+          "S3Bucket": { "Ref": "SourcesBucket" },
+          "S3Key": { "Fn::Join": [ "/", [ { "Ref": "SourcesKeyPrefix" }, "kms-lab.zip" ]]}
+        }
+      }
+    },
+    "KMSEnv": {
+      "Type": "AWS::ElasticBeanstalk::Environment",
+      "Properties": {
+        "ApplicationName": {
+          "Ref": "KMSApp"
+        },
+        "SolutionStackName": "64bit Amazon Linux 2015.03 v1.4.6 running Ruby 2.2 (Puma)",
+        "VersionLabel": { "Ref": "KMSVersion" },
+        "OptionSettings": [
+          {
+            "Namespace": "aws:elasticbeanstalk:environment",
+            "OptionName": "EnvironmentType",
+            "Value": "SingleInstance"
+          },
+          {
+            "Namespace": "aws:ec2:vpc",
+            "OptionName": "VpcId",
+            "Value": { "Ref": "VPC" }
+          },
+          {
+            "Namespace": "aws:ec2:vpc",
+            "OptionName": "Subnets",
+            "Value": { "Ref": "PublicSubnetA" }
+          },
+          {
+            "Namespace": "aws:ec2:vpc",
+            "OptionName": "AssociatePublicIpAddress",
+            "Value": "true"
+          },
+          {
+            "Namespace": "aws:autoscaling:launchconfiguration",
+            "OptionName": "InstanceType",
+            "Value": "t2.micro"
+          },
+          {
+            "Namespace": "aws:autoscaling:launchconfiguration",
+            "OptionName": "EC2KeyName",
+            "Value": { "Ref": "KeyName" }
+          },
+          {
+            "Namespace": "aws:autoscaling:launchconfiguration",
+            "OptionName": "IamInstanceProfile",
+            "Value": { "Ref": "KMSProfile" }
+          },
+          {
+            "Namespace": "aws:elasticbeanstalk:application:environment",
+            "OptionName": "AWS_REGION",
+            "Value": { "Ref": "AWS::Region" }
+          },
+          {
+            "Namespace": "aws:elasticbeanstalk:application:environment",
+            "OptionName": "TABLE_NAME",
+            "Value": { "Ref": "KMSDDBTable" }
+          }
+        ]
+      }
+    },
+    "ASGAppSecurityGroup" : {
+      "Type" : "AWS::EC2::SecurityGroup",
+      "Properties" : {
+        "GroupDescription" : "SecDevOps demo toolbox authorized source access IPs",
+        "SecurityGroupIngress" : [
+          {"CidrIp" : "0.0.0.0/0", "IpProtocol" : "tcp", "FromPort" : "80", "ToPort" : "80"}
+        ],
+        "VpcId" : {"Ref" : "VPC" }
+      }
+    },
+    "ASGAppSecurityGroupIngress": {
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "GroupId": { "Ref": "ASGAppSecurityGroup" },
+        "IpProtocol": "tcp",
+        "FromPort": "22",
+        "ToPort": "22",
+        "SourceSecurityGroupId": { "Ref": "ASGAppSecurityGroup" }
+      }
+    },
+    "SWFAppSecurityGroup" : {
+      "Type" : "AWS::EC2::SecurityGroup",
+      "Properties" : {
+        "GroupDescription" : "SecDevOps demo toolbox authorized source access IPs",
+        "SecurityGroupIngress" : [
+          {"CidrIp" : "0.0.0.0/0", "IpProtocol" : "tcp", "FromPort" : "22", "ToPort" : "22"}
+        ],
+        "VpcId" : {"Ref" : "VPC" }
+      }
+    },
+    "SWFAppSecurityGroupIngress": {
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "GroupId": { "Ref": "SWFAppSecurityGroup" },
+        "IpProtocol": "tcp",
+        "FromPort": "22",
+        "ToPort": "22",
+        "SourceSecurityGroupId": { "Ref": "SWFAppSecurityGroup" }
+      }
+    },
+    "ASGAppInstanceProfile": {
+      "Type": "AWS::IAM::InstanceProfile",
+      "Properties": {
+        "Path": "/",
+        "Roles": [{"Ref": "ASGAppInstanceRole"}]
+      }
+    },
+    "SWFAppInstanceProfile": {
+      "Type": "AWS::IAM::InstanceProfile",
+      "Properties": {
+        "Path": "/",
+        "Roles": [{"Ref": "SWFAppInstanceRole"}]
+      }
+    },
+    "ASGSlaveInstanceProfile": {
+      "Type": "AWS::IAM::InstanceProfile",
+      "Properties": {
+        "Path": "/",
+        "Roles": [{"Ref": "ASGSlaveInstanceRole"}]
+      }
+    },
+    "LifeCycleQueue" : {
+      "Type" : "AWS::SQS::Queue"
+    },
+    "AutoScalingLaunchConfiguration" : {
+      "Type" : "AWS::AutoScaling::LaunchConfiguration",
+      "Properties" : {
+        "AssociatePublicIpAddress" : true,
+        "ImageId" : {"Fn::FindInMap" : ["RegionMap",{"Ref" : "AWS::Region"},"64"]},
+        "InstanceType" : "t2.micro",
+        "SecurityGroups" : [ { "Ref" : "SWFAppSecurityGroup" } ],
+        "KeyName" : {"Ref" : "KeyName"},
+        "IamInstanceProfile" : {"Ref" : "ASGSlaveInstanceProfile"},
+        "UserData" : { "Fn::Base64" : { "Fn::Join" : ["", [
+            "#!/bin/bash -xe\n",
+            "echo ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCS1pul+aFfuv0IAtLp0/bSMYByEkd6jzMektaB7x4b/PqUshXgQHtsbg1rQU6K0Zvtj7VK9EZ/7KWb0YYE+jVQfAK7dCyUArV9MN9I/4KLSMWmeJ5qjmkwRy1a2Qs8jd9VCU9DyCBCJvaYpkzMt+aUebUWpphGMyhd/XTyQUmRK5PiWHk0tz4VnoicTGat+V70KsGm82vJ7P1/hcJAmqyCSB6U+Ea0fIxQ1NtSLv7ClPrwy1SPeaL83LUersOPf6PZGLpbHY+yMMFgGmYR8IPiD8+8m8ImVrFKr84TN0SsYWXy3QFPDfaEl/4OHSI3OZmMBYydWD71tlshDjzewZm9 >> /home/ec2-user/.ssh/authorized_keys\n"
+             ]]}}
+      }
+    },
+    "AutoScalingGroup" : {
+      "Type" : "AWS::AutoScaling::AutoScalingGroup",
+      "Properties" : {
+        "DesiredCapacity" : "0",
+        "LaunchConfigurationName" : {"Ref" : "AutoScalingLaunchConfiguration"},
+        "MaxSize" : "5",
+        "MinSize" : "0",
+        "VPCZoneIdentifier" : [{"Ref" : "PublicSubnetA"}]
+      }
+    },
+    "AutoScalingServiceRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument":{
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "autoscaling.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "Path": "/",
+        "Policies":[{
+          "PolicyName": "Publish_to_SQS",
+          "PolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Effect": "Allow",
+                "Action": [
+                  "sqs:SendMessage",
+                  "sqs:GetQueueUrl"
+                ],
+                "Resource": {"Fn::GetAtt": ["LifeCycleQueue", "Arn"]}
+              }
+            ]
+          }
+        }]
+      }
+    },
+    "DemoLifeCycleHook": {
+      "Type": "AWS::AutoScaling::LifecycleHook",
+      "Properties": {
+        "AutoScalingGroupName": { "Ref": "AutoScalingGroup" },
+        "LifecycleTransition": "autoscaling:EC2_INSTANCE_LAUNCHING",
+        "NotificationTargetARN": {"Fn::GetAtt": ["LifeCycleQueue", "Arn"]},
+        "RoleARN": { "Fn::GetAtt": [ "AutoScalingServiceRole", "Arn" ] }
+      }
+    },
+    "ASGAppInstanceRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version" : "2012-10-17",
+          "Statement": [{
+            "Effect": "Allow",
+            "Principal": {"Service": [ "ec2.amazonaws.com" ]},
+            "Action": [ "sts:AssumeRole" ]
+            }]
+          },
+          "Path": "/",
+          "Policies": [ {
+            "PolicyName": "CreatedViaCloudFormation",
+            "PolicyDocument": {
+              "Version" : "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "sqs:ReceiveMessage",
+                    "sqs:DeleteMessage"
+                  ],
+                  "Resource": {"Fn::GetAtt": ["LifeCycleQueue", "Arn"]}
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "autoscaling:CompleteLifecycleAction",
+                    "autoscaling:DescribeAutoScalingGroups",
+                    "autoscaling:UpdateAutoScalingGroup"
+                  ],
+                  "Resource" : "*"
+                },
+                {
+                "Effect" : "Allow",
+                "Action" : "swf:*",
+                "Resource" : "*"
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "ec2:DescribeInstances",
+                    "ec2:GetConsoleOutput",
+                    "ec2:GetPasswordData"
+                  ],
+                  "Resource": "*"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "SWFAppInstanceRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version" : "2012-10-17",
+          "Statement": [{
+            "Effect": "Allow",
+            "Principal": {"Service": [ "ec2.amazonaws.com" ]},
+            "Action": [ "sts:AssumeRole" ]
+            }]
+          },
+          "Path": "/",
+          "Policies": [ {
+            "PolicyName": "CreatedViaCloudFormationSWF",
+            "PolicyDocument": {
+              "Version" : "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "autoscaling:CompleteLifecycleAction",
+                    "autoscaling:DescribeAutoScalingGroups",
+                    "autoscaling:UpdateAutoScalingGroup"
+                  ],
+                  "Resource" : "*"
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "ec2:CreateTags",
+                    "ec2:DescribeInstanceStatus",
+                    "ec2:DescribeInstances",
+                    "ec2:DescribeNetworkInterfaces",
+                    "ec2:DescribeTags",
+                    "ec2:GetConsoleOutput",
+                    "ec2:TerminateInstances"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Action": [
+                    "dynamodb:BatchWriteItem",
+                    "dynamodb:CreateTable",
+                    "dynamodb:DescribeTable",
+                    "dynamodb:PutItem",
+                    "dynamodb:UpdateItem",
+                    "dynamodb:UpdateTable"
+                  ],
+                  "Effect": "Allow",
+                  "Resource": "*"
+                },
+                {
+                  "Effect" : "Allow",
+                  "Action" : "swf:*",
+                  "Resource" : "*"
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "logs:DescribeLogStreams",
+                    "logs:CreateLogGroup"
+                  ],
+                  "Resource": [
+                    "*"
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "ASGSlaveInstanceRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version" : "2012-10-17",
+          "Statement": [{
+            "Effect": "Allow",
+            "Principal": {"Service": [ "ec2.amazonaws.com" ]},
+            "Action": [ "sts:AssumeRole" ]
+            }]
+          },
+          "Path": "/",
+          "Policies": [ {
+            "PolicyName": "CreatedViaCloudFormationASGSlave",
+            "PolicyDocument": {
+              "Version" : "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "logs:CreateLogGroup",
+                    "logs:CreateLogStream",
+                    "logs:CreateLogGroup",
+                    "logs:CreateLogStream",
+                    "logs:DescribeLogGroups",
+                    "logs:DescribeLogStreams",
+                    "logs:DescribeMetricFilters",
+                    "logs:FilterLogEvents",
+                    "logs:GetLogEvents",
+                    "logs:PutLogEvents",
+                    "logs:PutMetricFilter",
+                    "logs:PutRetentionPolicy",
+                    "logs:TestMetricFilter"
+                  ],
+                  "Resource": [
+                    "*"
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "ASGAppBeanStalkApplication": {
+      "Type": "AWS::ElasticBeanstalk::Application",
+      "Properties": {
+        "Description": "An AutoScline LifeCycle Policy Demo App created by a CloudFormation template."
+      }
+    },
+    "SWFAppBeanStalkApplication": {
+      "Type": "AWS::ElasticBeanstalk::Application",
+      "Properties": {
+        "Description": "An AutoScline LifeCycle Policy SWF Governance App created by a CloudFormation template."
+      }
+    },
+    "ASGAppBeanStalkVersion": {
+      "Type" : "AWS::ElasticBeanstalk::ApplicationVersion",
+      "Properties" : {
+        "ApplicationName" : {"Ref" : "ASGAppBeanStalkApplication"},
+        "Description" : "Demo AutoScaling LifeCycle Watchdog Service.",
+        "SourceBundle" : {
+          "S3Bucket": { "Ref": "SourcesBucket" },
+          "S3Key": { "Fn::Join": [ "/", [ { "Ref": "SourcesKeyPrefix" }, "as_lifecycle_v1.zip" ]]}
+        }
+      }
+    },
+    "SWFAppBeanStalkVersion": {
+      "Type" : "AWS::ElasticBeanstalk::ApplicationVersion",
+      "Properties" : {
+        "ApplicationName" : {"Ref" : "SWFAppBeanStalkApplication"},
+        "Description" : "Demo AutoScaling SWF Worker.",
+        "SourceBundle" : {
+          "S3Bucket": { "Ref": "SourcesBucket" },
+          "S3Key": { "Fn::Join": [ "/", [ { "Ref": "SourcesKeyPrefix" }, "swf_worker_v1.zip" ]]}
+        }
+      }
+    },
+    "ASGAppBeanStalkEnvironment": {
+      "Type" : "AWS::ElasticBeanstalk::Environment",
+      "Properties" : {
+        "ApplicationName" : {"Ref" : "ASGAppBeanStalkApplication"},
+        "OptionSettings" : [
+          {
+            "Namespace" : "aws:elasticbeanstalk:environment",
+            "OptionName" : "EnvironmentType",
+            "Value" : "SingleInstance"
+          },
+          {
+            "Namespace" : "aws:ec2:vpc",
+            "OptionName" : "VpcId",
+            "Value" : {"Ref" : "VPC"}
+          },
+          {
+            "Namespace" : "aws:ec2:vpc",
+            "OptionName" : "Subnets",
+            "Value" : {"Ref" : "PublicSubnetA"}
+          },
+          {
+            "Namespace" : "aws:ec2:vpc",
+            "OptionName" : "AssociatePublicIpAddress",
+            "Value" : "true"
+          },
+          {
+            "Namespace" : "aws:autoscaling:launchconfiguration",
+            "OptionName" : "InstanceType",
+            "Value" : "t2.micro"
+          },
+          {
+            "Namespace" : "aws:autoscaling:launchconfiguration",
+            "OptionName" : "IamInstanceProfile",
+            "Value" : {"Ref" : "ASGAppInstanceProfile"}
+          },
+          {
+            "Namespace" : "aws:autoscaling:launchconfiguration",
+            "OptionName" : "SecurityGroups",
+            "Value" : {"Ref" : "ASGAppSecurityGroup"}
+          },
+          {
+            "Namespace" : "aws:elasticbeanstalk:application:environment",
+            "OptionName" : "QueueURL",
+            "Value" : {"Ref": "LifeCycleQueue"}
+          },
+          {
+            "Namespace" : "aws:elasticbeanstalk:application:environment",
+            "OptionName" : "ASGroupName",
+            "Value" : {"Ref": "AutoScalingGroup"}
+          },
+          {
+            "Namespace" : "aws:elasticbeanstalk:application:environment",
+            "OptionName" : "LifeCyclePolicyName",
+            "Value" : {"Ref": "DemoLifeCycleHook"}
+          }
+        ],
+        "SolutionStackName" : "64bit Amazon Linux 2015.03 v1.4.6 running Ruby 2.0 (Puma)",
+        "VersionLabel" : {"Ref" : "ASGAppBeanStalkVersion"}
+      }
+    },
+    "SWFAppBeanStalkEnvironment": {
+      "Type" : "AWS::ElasticBeanstalk::Environment",
+      "Properties" : {
+        "ApplicationName" : {"Ref" : "SWFAppBeanStalkApplication"},
+        "OptionSettings" : [
+          {
+            "Namespace" : "aws:elasticbeanstalk:environment",
+            "OptionName" : "EnvironmentType",
+            "Value" : "SingleInstance"
+          },
+          {
+            "Namespace" : "aws:ec2:vpc",
+            "OptionName" : "VpcId",
+            "Value" : {"Ref" : "VPC"}
+          },
+          {
+            "Namespace" : "aws:ec2:vpc",
+            "OptionName" : "Subnets",
+            "Value" : {"Ref" : "PublicSubnetA"}
+          },
+          {
+            "Namespace" : "aws:ec2:vpc",
+            "OptionName" : "AssociatePublicIpAddress",
+            "Value" : "true"
+          },
+          {
+            "Namespace" : "aws:autoscaling:launchconfiguration",
+            "OptionName" : "InstanceType",
+            "Value" : "t2.micro"
+          },
+          {
+            "Namespace" : "aws:autoscaling:launchconfiguration",
+            "OptionName" : "IamInstanceProfile",
+            "Value" : {"Ref" : "SWFAppInstanceProfile"}
+          },
+          {
+           "Namespace" : "aws:autoscaling:launchconfiguration",
+           "OptionName" : "EC2KeyName",
+           "Value" : { "Ref" : "KeyName" }
+          },
+          {
+            "Namespace" : "aws:autoscaling:launchconfiguration",
+            "OptionName" : "SecurityGroups",
+            "Value" : {"Ref" : "SWFAppSecurityGroup"}
+          },
+          {
+            "Namespace" : "aws:elasticbeanstalk:application:environment",
+            "OptionName" : "QueueURL",
+            "Value" : {"Ref": "LifeCycleQueue"}
+          },
+          {
+            "Namespace" : "aws:elasticbeanstalk:application:environment",
+            "OptionName" : "ASGroupName",
+            "Value" : {"Ref": "AutoScalingGroup"}
+          },
+          {
+            "Namespace" : "aws:elasticbeanstalk:application:environment",
+            "OptionName" : "LifeCyclePolicyName",
+            "Value" : {"Ref": "DemoLifeCycleHook"}
+          }
+        ],
+        "SolutionStackName" : "64bit Amazon Linux 2015.03 v2.0.1 running Ruby 2.2 (Passenger Standalone)",
+        "VersionLabel" : {"Ref" : "SWFAppBeanStalkVersion"}
+      }
+    }
+  },
+  "Outputs": {
+    "JenkinsURL": {
+      "Description": "Direct your browser to this URL to see access the Jenkins component of the CD infrastructure.",
+      "Value": {
+        "Fn::Join": [
+          "",
+          [ "http://", { "Fn::GetAtt": [ "CDEnv", "EndpointURL" ]}]
+        ]
+      }
+    },
+    "GitBucketURL": {
+      "Description": "Direct your browser to this URL to see access the GitBucket component of the CD infrastructure.",
+      "Value": {
+        "Fn::Join": [
+          "",
+          [ "http://", { "Fn::GetAtt": [ "CDEnv", "EndpointURL" ]}, "/gitbucket" ]
+        ]
+      }
+    },
+    "JenkinsBucketName": {
+      "Description": "Bucket used for build artifacts and other CD generated resources",
+      "Value": { "Ref": "JenkinsJobBucket" }
+    },
+    "KMSURL": {
+      "Description": "Direct your browser to this URL to see the KMS lab.",
+      "Value": {
+        "Fn::Join": [
+          "",
+          [ "http://", { "Fn::GetAtt": [ "KMSEnv", "EndpointURL" ]}]
+        ]
+      }
+    },
+    "IAMURL": {
+      "Description": "Direct your browser to this URL to see the IAM lab.",
+      "Value": {
+        "Fn::Join": [
+          "",
+          [ "http://", {"Fn::GetAtt": [ "IAMEnv", "EndpointURL" ]}]
+        ]
+      }
+    },
+    "IAMCLI": {
+      "Description": "SSH to this server to demonstrate AWS CLI credentials.",
+      "Value": {
+        "Fn::Join": [
+          "",
+          [ "ssh -i ~/", { "Ref" : "KeyName" }, ".pem ec2-user@", { "Fn::GetAtt": [ "IAMCli", "PublicIp" ]}]
+        ]
+      }
+    },
+    "CodeDeployServiceRole": {
+      "Description": "The name of the Role that's provisioned for CodeDeploy.",
+      "Value": {
+        "Fn::GetAtt": [ "CodeDeploySvcRole", "Arn" ]
+      }
+    },
+    "DeployTargetA": {
+      "Description": "First deployment target instance public IP address",
+      "Value": {
+        "Fn::Join": [
+          "",
+          [ "http://", { "Fn::GetAtt": [ "DeployTargetA", "PublicIp" ]}]
+        ]
+      }
+    },
+    "DeployTargetB": {
+      "Description": "First deployment target instance public IP address",
+      "Value": {
+        "Fn::Join": [
+          "",
+          [ "http://", { "Fn::GetAtt": [ "DeployTargetB", "PublicIp" ]}]
+        ]
+      }
+    },
+    "ASGApplicationURL":{
+      "Description": "Direct your browser to this URL to see the demo application in action.",
+      "Value":{"Fn::Join" : [ "", [ "http://", {"Fn::GetAtt" : ["ASGAppBeanStalkEnvironment" ,"EndpointURL"]}]]}
+    },
+    "SWFApplicationIP":{
+      "Description": "IP to SSH into to access the EB logs.",
+      "Value":{"Fn::Join" : [ "", [ {"Fn::GetAtt" : ["SWFAppBeanStalkEnvironment" ,"EndpointURL"]}]]}
+    }
+  }
+}
