@@ -1,6 +1,6 @@
 # AWS Re:Invent 2015
 
-://events-aws.qwiklab.com/?ref_=7
+http://events-aws.qwiklab.com/?ref_=7
 re:Invent 2015 - Bootcamp - Architecting Highly Available Applications on AWS  In Session
 
 "Everything fails all of the time"
@@ -212,7 +212,7 @@ Terminating state
  - hold malfunctioning instances off to the side for debugging
 
 
-**AWS Storage Options**
+#### AWS Storage Options
 - Pick the right storage for the workload  Amazon EC2
  - Amazon EC2 Local Instance Store (Ephemeral volumes)
   - Magnetic and SSD
@@ -285,6 +285,7 @@ Enable EC2 Termination Protection. Use with data that doesn’t need to be
 retained across instance stop/start
 
 **Pre-warming**
+
 For new volumes, EBS wipes blocks clean. For restored volumes, EBS instantiates
 blocks from its snapshot. To obtain best performance, pre-warm the volume •
 http://amzn.to/1evnVDn. Recommended for high performance workloads Pre-warming
@@ -307,3 +308,221 @@ wide variety of workloads. Highly available and durable. NFS v4–based
 - Pay for the storage that you use.
 
 #### Amazon S3
+
+Durable storage for any object. Buckets act like drives with folder structures
+within. Granular access control, server side encryption, multipart uploads,
+object versioning, object lifecyle, access logging, web content hosting,
+notifications.
+
+**Cross region replication**
+
+Increases availability of your S3 objects. Every object uploaded to a S3 bucket
+is automatically replicated to a bucket in a different AWS region. Replicates
+new objects. Enable versioning and cross-region replication. Ideal for
+compliance/regulatory reasons where data must be replicated 100s of miles
+apart.
+
+**Performance Considerations
+
+Use CloudFront for faster access to S3 objects. CloudFront caches requested
+objects closer to end users. At higher usage, the price for CloudFront data
+transfer is lower than the price for Amazon S3 data transfer.
+
+**Naming conventions**
+
+Important if PUT req/s > 100 or GET req/s > 300. Not necessary for occasional
+bursts of 100-800 req/s  Avoid dates or ordered sequence. Add randomness to Amazon S3 keys. Can store objects as a hash of their name.
+
+Add the original name as metadata:
+`deadmau5_mix.mp3”  0aa316fb000eae52921aab1b4697424958a53ad9`
+
+Prepend keyname with short hash
+`0aa3-deadmau5_mix.mp3`
+
+Epoch time (reverse)
+`5321354831-deadmau5_mix.mp3`
+
+**Performance Considerations**
+
+Ensure that you're using multi-part uploads:
+- Improved throughput
+- Quick recovery from any network issues
+- SDKs/CLI and other tools provide multi-part upload
+
+**AMIs and EBS Snapshots**
+
+AMIs & snapshots are specific to a region. For HA/DR purposes, ensure your
+custom AMIs & snapshots are in the regions that you intend to use. Both can be
+copied across regions:
+- Geographic expansion
+- HA/DR
+- Migration
+Avoid/reduce AMI copy by dynamically bootstrapping. Also, the snapshot/AMI copy is incremental
+
+## Database High Availability
+
+AWS offers highly available managed databases (RDS, Aurora, DynamoDB), as well as self-managed instances. Use EBS GP2 Volumes for low/medium workloads. EBS PIOPS provides up to 20,000 IOPS/volume for high performance workloads:
+- Volumes can be logically striped for even higher IOPS. Separate data from logs and swap;
+- Use separate EBS volumes not just separate partition
+- Use EBS Optimized instances with EBS PIOPS volumes
+Ephemeral disk (aka instance storage) for temporary data:
+- Reduces EBS I/O consumption
+- Only if TempDB isn’t storing critical values
+
+**HA Considerations**
+
+Each DB has features for HA, like mirroring, replication, etc., which mitigate the impact of individual system failure
+- SQL Server mirroring, SQL Server 2012 AlwaysOn Availability Groups  MySQL async replication
+- Oracle Data Guard
+- Oracle RAC (unavailable, co-locate at AWS Partner and use DirectConnect to link with AWS)
+Create AMIs of your Amazon EC2 database instance to preserve any complex configuration changes you’ve made for subsequent launches.
+
+**NoSQL Databases**
+
+Can process large amounts of data with high availability. Depends on the NoSQL
+solution, configuration and architecture. Broad category with different
+implementations & data models. Distributed FT model is usually a common feature
+with NoSQL databases
+
+Does your app need transaction support, ACID compliance, joins, SQL? Try
+refactoring database hotspots to NoSQL solutions. NoSQL DBs can offer increases
+in flexibity, availability, scalability and performance.
+
+### Dataase as a Service
+
+#### Amazon RDS
+
+Simple and fast to deploy, scale. AWS handles patching, backups, replication. Predictable performance. GP2 SSD storage is suitable for a broad range of database workloads
+- Provides baseline of 3 IOPS/GB and ability to burst to 3,000 IOPS
+PIOPS SSD storage is suitable for I/O-intensive database workloads. Provides flexibility to provision I/O ranging from 1,000 to 30,000 IOPS. Magnetic storage may be used for small database workloads where data is accessed less frequently Backups are automatic if configured.
+
+**Scaling Databases**
+
+Whether self-managed or RDS, you can scale vertically for CPU/RAM/disk-IO.
+- For read heavy databases, cache heavily with in memory caching. Create read-only databases to relieve pressure on master database
+- For write intensive databases, consider:
+ - PIOPS
+ - Sharding
+ - NoSQL options if applicable
+
+Scaling read servers: Optimize master for OLTP and read-only instances for
+table scans. Resize read-only instances as needed to boost reporting
+performance. Use short-term read-only instances to save cost during monthly
+reporting. Promote to standalone server Eventually consistent reads
+
+Add in caching: small, frequently-accessed items are candidates for read caching. Reduce server-side latency to microseconds. Eliminate “hot spot” performance barriers. Offload heavy read activity from database
+
+Database sharding: creates a share-nothing architecture, and splits large partitionable tables across multiple, small database servers. Will likely require periodic rebalancing.
+Challenges:
+- key management
+- queue aggregation
+- cross-shard queries
+
+**HA RDS**
+Use multi-AZ deployment to enhance fault tolerance and availability for production workloads. Allows or Automatic failover in case of
+- Loss of availability in primary AZ
+- Loss of connectivity to primary
+- Host or storage failure on primary  Vertical scaling
+- Software patching
+- Rebooting of primary
+RDS uses DNS to transfer traffic to your backup instances if there are any issues. Can also copy database snapshots to another AWS region, for use as a warm standby for DR. Brings data close to your customers.
+
+#### Amazon Aurora
+
+A relational database using a service oriented approach. Allows for the storage to scale out and becom mult-tenant. Backwards compatible with MySQL 5.6. Can create a databse in minutes. 
+- Instance on-volume snapshots
+- Continuous, incremental off-volume snapshots to S3.
+- Storage scaling up to 64TB
+- Automatic restripinng mirror repair, hot spot maagement, ecryption.
+
+Highly available by default. 6-wayreplicationacross 3 AZs. 4 of 6 write quorum. Automatic fallback to 3 of 4 if an AZ is unavailable  3 of 6 read quorum. SSD, scale-out, multi-tenant storage  Seamless storage scalability. Up to 64TB database size
+
+Log-structured storage
+Many small segments, each with their own redo logs
+log pages used to generate data pages.
+Eliminates chatter between database and storage.
+
+**Self Healing and fault tolerant**
+Lose two copies or an AZ failure without read or write availability impact Lose three copies without read availability impact
+Automatic detection, replication, and repair
+
+#### Amazon DynamoDB
+
+SSD-backed service with consistent latency in single digit milliseconds that doesn't increase as stroage grows.
+Durability
+- Synchronous replication for high durability
+- A write is only acknowledged (committed) once it exists in at least two physical data centers
+- All writes occur to disk, not memory
+- Backup to other AWS regions
+Availability
+- Regional service
+- Spans multiple AZ’s
+- All data is continuously replicated to multiple AZ’s
+
+**Provisioning Throughput**
+
+Can provision throughput needed
+Provision the throughput needed for each table
+ Set at table creation
+ Example: My table needs 1,000 writes/second and 5,000 reads/seconds of capacity
+Increase / decrease any time via API call
+Pay for throughput and storage (not instances)
+ Reserved capacity available to optimize for cost
+From a HA perspective, this feature ensures DynamoDB can serve requests
+during periods of extremely high demand
+Benefits
+ Simpler capacity planning
+ Don’t have to think in terms of servers and disk IOPS  Won’t be locked in your peak for month or year
+
+## High Availability Design Patterns
+
+#### Multi-Server Pattern
+
+#### Multi-Datacenter Pattern
+
+#### High Availability Database Pattern
+
+#### EC2 Auto Recovery
+
+Able to detect when the instances is impaired via Cloudwatch monitoring. Gives
+you a replacement instance with the same instance ID, metadata, IP address. In
+memory data is lost. Only works with certain instance types, and instance
+storage cannot be used.
+
+#### Floating IP Pattern
+
+#### Floating Interface Pattern
+
+#### State Sharing
+
+#### Scheduled Scale out
+
+#### Job Observer Pattern
+
+#### Bootstrap Instance
+
+#### High Availability NAT
+
+#### HA NAT - Squid Proxy
+
+## VPC and Direct Connect Availability Patterns
+
+#### Connectivity Options
+VPN connectivity connects dual redundant tunnels between your on-premises equipment and AWS.
+- Redundant IPsec tunnels
+- Supports BGP and static routing
+- Redundant customer gateways
+AWS Direct Connect establishes a private network connection between your network and one of the AWS Regions.
+
+# Building Loosely Coupled Applications on AWS
+
+#### Loose Coupling
+Degree of dependence among components. Direct knowledge of one component of
+dependent components. Reduce coupling as much as possible Components can be
+built & tested independently Limit component failure impact. Core principle of
+Service Oriented Architecture
+
+The looser they are coupled, the bigger they scale, and the more fault tolerant they get.
+
+
+https://d0.awsstatic.com/whitepapers/architecture/AWS_Well-Architected_Framework.pdf

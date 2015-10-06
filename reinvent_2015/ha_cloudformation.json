@@ -1,0 +1,552 @@
+{  
+   "Description":"Lab 1: Single web server and mysql server.  Route 53 DNS failover.",
+   "Parameters":{  
+      "KeyName":{  
+         "Description":"Name of an existing EC2 KeyPair to enable SSH access to the instances",
+         "Type":"String",
+         "MinLength":"1",
+         "MaxLength":"64",
+         "AllowedPattern":"[-_ a-zA-Z0-9]*",
+         "ConstraintDescription":"can contain only alphanumeric characters, spaces, dashes and underscores."
+      },
+      "InstanceType":{  
+         "Description":"WebServer EC2 instance type, t2 or m3 family only.",
+         "Type":"String",
+         "AllowedValues":[  
+            "t2.micro",
+            "t2.small",
+            "t2.medium",
+            "m3.medium",
+            "m3.large",
+            "m3.xlarge",
+            "m3.2xlarge"
+         ],
+         "ConstraintDescription":"must be a valid EC2 instance type.",
+         "Default":"t2.micro"
+      }
+   },
+   "Mappings":{  
+      "AWSAMI":{  
+         "us-east-1":{  
+            "AMI":"ami-1ecae776"
+         },
+         "us-west-1":{  
+            "AMI":"ami-d114f295"
+         },
+         "us-west-2":{  
+            "AMI":"ami-e7527ed7"
+         },
+         "eu-west-1":{  
+            "AMI":"ami-a10897d6"
+         },
+         "eu-central-1":{  
+            "AMI":"ami-a8221fb5"
+         },
+         "ap-southeast-1":{  
+            "AMI":"ami-68d8e93a"
+         },
+         "ap-northeast-1":{  
+            "AMI":"ami-cbf90ecb"
+         },
+         "ap-southeast-2":{  
+            "AMI":"ami-fd9cecc7"
+         },
+         "sa-east-1":{  
+            "AMI":"ami-956cc688"
+         }
+      }
+   },
+   "Resources":{  
+      "CloudWikiIAMUser":{  
+         "Type":"AWS::IAM::User",
+         "Properties":{  
+            "Path":"/",
+            "Policies":[  
+               {  
+                  "PolicyName":"root",
+                  "PolicyDocument":{  
+                     "Statement":[  
+                        {  
+                           "Effect":"Allow",
+                           "Action":[  
+                              "*"
+                           ],
+                           "Resource":"*"
+                        }
+                     ]
+                  }
+               }
+            ]
+         }
+      },
+      "CloudWikiIAMAccessKey":{  
+         "Type":"AWS::IAM::AccessKey",
+         "Properties":{  
+            "UserName":{  
+               "Ref":"CloudWikiIAMUser"
+            }
+         }
+      },
+      "CloudWikiWWWSecurityGroup":{  
+         "Type":"AWS::EC2::SecurityGroup",
+         "Properties":{  
+            "GroupDescription":"CloudWiki www servers",
+            "SecurityGroupIngress":[  
+               {  
+                  "IpProtocol":"tcp",
+                  "FromPort":"22",
+                  "ToPort":"22",
+                  "CidrIp":"0.0.0.0/0"
+               },
+               {  
+                  "IpProtocol":"tcp",
+                  "FromPort":"80",
+                  "ToPort":"80",
+                  "CidrIp":"0.0.0.0/0"
+               }
+            ]
+         }
+      },
+      "CloudWikiDBSecurityGroup":{  
+         "Type":"AWS::EC2::SecurityGroup",
+         "Properties":{  
+            "GroupDescription":"CloudWiki DB servers",
+            "SecurityGroupIngress":[  
+               {  
+                  "IpProtocol":"tcp",
+                  "FromPort":"22",
+                  "ToPort":"22",
+                  "CidrIp":"0.0.0.0/0"
+               },
+               {  
+                  "IpProtocol":"tcp",
+                  "FromPort":"3306",
+                  "ToPort":"3306",
+                  "CidrIp":"0.0.0.0/0"
+               }
+            ]
+         }
+      },
+      "CloudWikiWebServerInstanceEIP":{  
+         "Type":"AWS::EC2::EIP"
+      },
+      "CloudWikiDBInstance":{  
+         "Type":"AWS::EC2::Instance",
+         "Metadata":{  
+            "AWS::CloudFormation::Init":{  
+               "config":{  
+                  "packages":{  
+                     "yum":{  
+                        "mysql-server":[  
+
+                        ]
+                     }
+                  },
+                  "sources":{  
+                     "/tmp":"http://d2d22sxo7mbint.cloudfront.net/arch-ha-apps/common/wikipedia-cloud-computing-20121012.sql.tar.bz2"
+                  },
+                  "services":{  
+                     "sysvinit":{  
+                        "mysqld":{  
+                           "enabled":"true",
+                           "ensureRunning":"true"
+                        }
+                     }
+                  }
+               }
+            }
+         },
+         "Properties":{  
+            "ImageId":{  
+               "Fn::FindInMap":[  
+                  "AWSAMI",
+                  {  
+                     "Ref":"AWS::Region"
+                  },
+                  "AMI"
+               ]
+            },
+            "InstanceType":{  
+               "Ref":"InstanceType"
+            },
+            "KeyName":{  
+               "Ref":"KeyName"
+            },
+            "SecurityGroups":[  
+               {  
+                  "Ref":"CloudWikiDBSecurityGroup"
+               }
+            ],
+            "Tags":[  
+               {  
+                  "Key":"Name",
+                  "Value":"cloudwiki-lab1-db"
+               }
+            ],
+            "UserData":{  
+               "Fn::Base64":{  
+                  "Fn::Join":[  
+                     "",
+                     [  
+                        "#!/bin/bash\n",
+                        "/opt/aws/bin/cfn-init -v",
+                        "    --stack ",
+                        {  
+                           "Ref":"AWS::StackName"
+                        },
+                        " -r CloudWikiDBInstance",
+                        "    --access-key ",
+                        {  
+                           "Ref":"CloudWikiIAMAccessKey"
+                        },
+                        "    --secret-key ",
+                        {  
+                           "Fn::GetAtt":[  
+                              "CloudWikiIAMAccessKey",
+                              "SecretAccessKey"
+                           ]
+                        },
+                        "    --region     ",
+                        {  
+                           "Ref":"AWS::Region"
+                        },
+                        "\n",
+                        "mysqladmin -u root password W7EAxK2jphqBGe\n",
+                        "mysqladmin --user=root --password=W7EAxK2jphqBGe create cloudwiki\n",
+                        "echo \"GRANT ALL ON *.* to root@'%' IDENTIFIED BY 'W7EAxK2jphqBGe'; FLUSH PRIVILEGES;\" | mysql -u root -pW7EAxK2jphqBGe mysql\n",
+                        "mysql ",
+                        "    --user=root",
+                        "    --password=W7EAxK2jphqBGe",
+                        "    --database=cloudwiki",
+                        "    < /tmp/wikipedia-cloud-computing-20121012.sql\n"
+                     ]
+                  ]
+               }
+            }
+         },
+         "DependsOn":"CloudWikiDBSecurityGroup"
+      },
+      "CloudWikiWebServerWaitHandle":{  
+         "Type":"AWS::CloudFormation::WaitConditionHandle"
+      },
+      "RootRole":{  
+         "Type":"AWS::IAM::Role",
+         "Properties":{  
+            "AssumeRolePolicyDocument":{  
+               "Statement":[  
+                  {  
+                     "Effect":"Allow",
+                     "Principal":{  
+                        "Service":[  
+                           "ec2.amazonaws.com"
+                        ]
+                     },
+                     "Action":[  
+                        "sts:AssumeRole"
+                     ]
+                  }
+               ]
+            },
+            "Path":"/"
+         }
+      },
+      "RolePolicies":{  
+         "Type":"AWS::IAM::Policy",
+         "Properties":{  
+            "PolicyName":"root",
+            "PolicyDocument":{  
+               "Statement":[  
+                  {  
+                     "Effect":"Allow",
+                     "Action":"*",
+                     "Resource":"*"
+                  }
+               ]
+            },
+            "Roles":[  
+               {  
+                  "Ref":"RootRole"
+               }
+            ]
+         }
+      },
+      "RootInstanceProfile":{  
+         "Type":"AWS::IAM::InstanceProfile",
+         "Properties":{  
+            "Path":"/",
+            "Roles":[  
+               {  
+                  "Ref":"RootRole"
+               }
+            ]
+         }
+      },
+      "CloudWikiWebServerInstance":{  
+         "Type":"AWS::EC2::Instance",
+         "Metadata":{  
+            "AWS::CloudFormation::Init":{  
+               "config":{  
+                  "packages":{  
+                     "yum":{  
+                        "git":[  
+
+                        ],
+                        "httpd":[  
+
+                        ],
+                        "php":[  
+
+                        ],
+                        "php-amazon-sdk":[  
+
+                        ],
+                        "php-mysqlnd":[  
+
+                        ],
+                        "ImageMagick":[  
+
+                        ],
+                        "rubygem20-aws-sdk":[  
+
+                        ]
+                     }
+                  },
+                  "sources":{  
+                     "/var/www/html":"http://d2d22sxo7mbint.cloudfront.net/arch-ha-apps/common/mediawiki-1.25.1.zip",
+                     "/var/www/html/":"http://d2d22sxo7mbint.cloudfront.net/arch-ha-apps/common/Cite-aa635f09f8edcda1b78ee2a9e2c7c7830fcaeb41.tar.gz",
+                     "/home/ec2-user/":"http://d2d22sxo7mbint.cloudfront.net/arch-ha-apps/lab1/lab1.zip"
+                  },
+                  "files":{  
+                     "/var/www/html/mediawiki-1.25.1/LocalSettings.php":{  
+                        "content":{  
+                           "Fn::Join":[  
+                              "",
+                              [  
+                                 "<?php\n",
+                                 "\n",
+                                 "if (!defined('MEDIAWIKI')) {\n",
+                                 "    exit;\n",
+                                 "}\n",
+                                 "\n",
+                                 "$wgSitename                     = 'CloudWiki';\n",
+                                 "$wgScriptPath                   = '/wiki';\n",
+                                 "$wgScriptExtension              = '.php';\n",
+                                 "$wgServer                       = 'http://",
+                                 {  
+                                    "Ref":"CloudWikiWebServerInstanceEIP"
+                                 },
+                                 "';\n",
+                                 "$wgStylePath                    = \"$wgScriptPath/skins\";\n",
+                                 "$wgEnableEmail                  = false;\n",
+                                 "$wgEnableUserEmail              = true; # UPO\n",
+                                 "$wgEmergencyContact             = 'nobody@amazon.com';\n",
+                                 "$wgPasswordSender               = 'nobody@amazon.com';\n",
+                                 "$wgEnotifUserTalk               = false; # UPO\n",
+                                 "$wgEnotifWatchlist              = false; # UPO\n",
+                                 "$wgEmailAuthentication          = true;\n",
+                                 "$wgLogo                         = \"$wgServer/wiki/images/cloud-wiki-logo.png\";\n",
+                                 "$wgDBtype                       = 'mysql';\n",
+                                 "$wgDBserver                     = '",
+                                 {  
+                                    "Fn::GetAtt":[  
+                                       "CloudWikiDBInstance",
+                                       "PrivateIp"
+                                    ]
+                                 },
+                                 "';\n",
+                                 "$wgDBname                       = 'cloudwiki';\n",
+                                 "$wgDBuser                       = 'root';\n",
+                                 "$wgDBpassword                   = 'W7EAxK2jphqBGe';\n",
+                                 "$wgDBprefix                     = '';\n",
+                                 "$wgDBTableOptions               = 'ENGINE=MyISAM, DEFAULT CHARSET=binary';\n",
+                                 "$wgDBmysql5                     = false;\n",
+                                 "$wgShowExceptionDetails         = true;\n",
+                                 "\n",
+                                 "########## BEGIN Performance and caching variables ##########\n",
+                                 "$wgMainCacheType                = CACHE_NONE;\n",
+                                 "$wgCacheDirectory               = \"$IP/cache\";\n",
+                                 "$wgFileCacheDirectory           = \"$IP/filecache\";\n",
+                                 "$wgMemCachedServers             = array();\n",
+                                 "$wgUseFileCache                 = false;\n",
+                                 "$wgUseGzip                      = true;\n",
+                                 "$wgEnableSidebarCache           = true;\n",
+                                 "$wgDisableCounters              = true;\n",
+                                 "$wgMiserMode                    = true;\n",
+                                 "$wgCompressRevisions            = true;\n",
+                                 "$wgRevisionCacheExpiry          = 3*24*3600;\n",
+                                 "$wgParserCacheExpireTime        = 14*24*3600;\n",
+                                 "########## END Performance and caching variables ##########\n",
+                                 "\n",
+                                 "$wgEnableUploads                = false;\n",
+                                 "$wgUseImageMagick               = true;\n",
+                                 "$wgImageMagickConvertCommand    = '/usr/bin/convert';\n",
+                                 "$wgUseInstantCommons            = true;\n",
+                                 "$wgShellLocale                  = 'en_US.utf8';\n",
+                                 "$wgLanguageCode                 = 'en';\n",
+                                 "$wgSecretKey                    = '52c7e3cba94080ae9e11080e597aad886ea074cc49d1c498a1c3cb066a628ffb';\n",
+                                 "$wgUpgradeKey                   = '185e61a597779ed9';\n",
+                                 "$wgDefaultSkin                  = 'vector';\n",
+                                 "$wgDiff3                        = '/usr/bin/diff3';\n",
+                                 "$wgResourceLoaderMaxQueryLength = -1;\n",
+                                 "\n",
+                                 "wfLoadSkin( 'Vector' );\n",
+                                 "\n",
+                                 "require_once(\"$IP/extensions/Cite/Cite.php\");\n",
+                                 "require_once(\"$IP/extensions/ParserFunctions/ParserFunctions.php\");\n"
+                              ]
+                           ]
+                        }
+                     }
+                  },
+                  "services":{  
+                     "sysvinit":{  
+                        "httpd":{  
+                           "enabled":"true",
+                           "ensureRunning":"true"
+                        }
+                     }
+                  }
+               }
+            }
+         },
+         "Properties":{  
+            "ImageId":{  
+               "Fn::FindInMap":[  
+                  "AWSAMI",
+                  {  
+                     "Ref":"AWS::Region"
+                  },
+                  "AMI"
+               ]
+            },
+            "IamInstanceProfile":{  
+               "Ref":"RootInstanceProfile"
+            },
+            "InstanceType":{  
+               "Ref":"InstanceType"
+            },
+            "KeyName":{  
+               "Ref":"KeyName"
+            },
+            "SecurityGroups":[  
+               {  
+                  "Ref":"CloudWikiWWWSecurityGroup"
+               }
+            ],
+            "Tags":[  
+               {  
+                  "Key":"Name",
+                  "Value":"cloudwiki-lab1-www"
+               }
+            ],
+            "UserData":{  
+               "Fn::Base64":{  
+                  "Fn::Join":[  
+                     "",
+                     [  
+                        "#!/bin/bash\n",
+                        "/opt/aws/bin/cfn-init -v -s ",
+                        {  
+                           "Ref":"AWS::StackName"
+                        },
+                        " -r CloudWikiWebServerInstance",
+                        "         --access-key ",
+                        {  
+                           "Ref":"CloudWikiIAMAccessKey"
+                        },
+                        "         --secret-key ",
+                        {  
+                           "Fn::GetAtt":[  
+                              "CloudWikiIAMAccessKey",
+                              "SecretAccessKey"
+                           ]
+                        },
+                        "         --region     ",
+                        {  
+                           "Ref":"AWS::Region"
+                        },
+                        "\n",
+                        "yum update -y\n",
+                        "mv -v /var/www/html/mediawiki-1.25.1 /var/www/html/wiki\n",
+                        "mkdir -pv /var/www/html/wiki/images\n",
+                        "mkdir -pv /var/www/html/wiki/cache\n",
+                        "mkdir -pv /var/www/html/wiki/filecache\n",
+                        "mv -v /var/www/html/Cite /var/www/html/wiki/extensions\n",
+                        "php /var/www/html/wiki/maintenance/update.php --quick\n",
+                        "cd /var/www/html/wiki/images\n",
+                        "curl -O http://d2d22sxo7mbint.cloudfront.net/arch-ha-apps/common/cloud-wiki-logo.png\n",
+                        "chown -R apache:apache /var/www/html/\n",
+                        "cd /home/ec2-user/\n",
+                        "curl -O http://d2d22sxo7mbint.cloudfront.net/arch-ha-apps/lab1/static-wiki.zip\n",
+                        "unzip static-wiki.zip\n",
+                        "ruby /home/ec2-user/lab1/lab1.rb ",
+                        {  
+                           "Ref":"CloudWikiWebServerInstanceEIP"
+                        },
+                        " >&  /home/ec2-user/log.txt \n",
+                        "/opt/aws/bin/cfn-signal -e $? '",
+                        {  
+                           "Ref":"CloudWikiWebServerWaitHandle"
+                        },
+                        "'\n"
+                     ]
+                  ]
+               }
+            }
+         },
+         "DependsOn":"CloudWikiWWWSecurityGroup"
+      },
+      "CloudWikiWebServerEIPWaitCondition":{  
+         "Type":"AWS::CloudFormation::WaitCondition",
+         "DependsOn":"CloudWikiWebServerInstance",
+         "Properties":{  
+            "Handle":{  
+               "Ref":"CloudWikiWebServerWaitHandle"
+            },
+            "Timeout":"600"
+         }
+      },
+      "CloudWikiWebServerInstanceEIPAssociation":{  
+         "Type":"AWS::EC2::EIPAssociation",
+         "DependsOn":"CloudWikiWebServerEIPWaitCondition",
+         "Properties":{  
+            "EIP":{  
+               "Ref":"CloudWikiWebServerInstanceEIP"
+            },
+            "InstanceId":{  
+               "Ref":"CloudWikiWebServerInstance"
+            }
+         }
+      }
+   },
+   "Outputs":{  
+      "WikiURL":{  
+         "Value":{  
+            "Fn::Join":[  
+               "",
+               [  
+                  "http://",
+                  {  
+                     "Ref":"CloudWikiWebServerInstanceEIP"
+                  },
+                  "/wiki/"
+               ]
+            ]
+         }
+      },
+      "Domain":{  
+         "Value":{  
+            "Fn::Join":[  
+               "",
+               [  
+                  "http://",
+                  {  
+                     "Ref":"CloudWikiWebServerInstance"
+                  },
+                  ".highlyavailable.org/wiki/"
+               ]
+            ]
+         }
+      }
+   }
+}
